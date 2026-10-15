@@ -65,7 +65,7 @@ jobs:
 
       - name: Cross-compile for Android arm64
         run: |
-          cargo ndk -t arm64 -o android/app/src/main/assets \
+          cargo ndk -t arm64-v8a -o android/app/src/main/assets \
             build --release --target aarch64-linux-android \
             --no-default-features --features no-official-api,tts-native
 
