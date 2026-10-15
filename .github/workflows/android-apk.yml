@@ -1,0 +1,74 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust + NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: '26.1.10909125'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Cross-compile for Android arm64
+        run: |
+          cargo ndk -t arm64 -o android/app/src/main/assets \
+            build --release --target aarch64-linux-android \
+            --no-default-features --features no-official-api,tts-native
+
+      - name: Verify binary
+        run: |
+          ls -la android/app/src/main/assets/
+          file android/app/src/main/assets/tomato-novel-downloader*
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android cmdline-tools
+        uses: android-actions/setup-android@v3
+        continue-on-error: true
+
+      - name: Install Android SDK
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" || true
+
+      - name: Gradle wrapper
+        run: |
+          cd android
+          gradle wrapper --gradle-version 8.7 --distribution-type bin
+          chmod +x gradlew
+
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tomanova-arm64
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
